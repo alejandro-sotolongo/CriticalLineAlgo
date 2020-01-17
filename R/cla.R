@@ -60,6 +60,13 @@ calc_lambda <- function(cov_f_inv, cov_fb, mu_f, wgt_b, i, b_i) {
   c3 <- t(one_f) %*% cov_f_inv %*% mu_f
   c4 <- cov_f_inv %*% one_f
   c_i <- -c1[1] * c2[i] + c3[1] * c4[i]
+  if (length(b_i) > 1) {
+    if (c_i > 0) {
+      b_i <- b_i[2]
+    } else {
+      b_i <- b_i[1]
+    }
+  }
   lam1 <- t(one_b) %*% wgt_b
   lam2 <- cov_f_inv %*% cov_fb %*% wgt_b
   lambda_i <- ((1 - lam1 + t(one_f) %*% lam2) * c4[i] - c1 * (b_i + lam2[i])) / c_i
@@ -98,38 +105,58 @@ run_cla <- function() {
   store$l <- NA
   store$wgt_list <- list(store$wgt_vec)
 
-  # Case a)
-  l_in <- NA
-
-
-  # Case b)
-  l_out <- NA
-  if (length(store$i_free) < n_assets) {
-    b <- get_b(store$i_free, n_assets)
-    l_vec <- rep(0, length(b))
-    j <- 1
-    for (i in b) {
-      s <- sub_mat(mu_vec, cov_mat, store$wgt_vec, c(store$i_free, i))
-      l <- calc_lambda(s$cov_f_inv, s$cov_fb, s$mu_f, s$wgt_b, length(s$mu_f),
-                       store$wgt_vec[i])
-      j <- j + 1
-      if ((is.na(store$l) | l$l_i < store$l) & (l$l_i > 0 | l$l_i > l_out)) {
-        l_out <- l$l_i
-        i_out <- i
+  for (iter in 1:1000) {
+    # Case a)
+    l_in <- NA
+    if (length(store$i_free) > 1) {
+      s <- sub_mat(mu_vec, cov_mat, store$wgt_vec, store$i_free)
+      j <- 1
+      for (i in store$i_free) {
+        l <- calc_lambda(s$cov_f_inv, s$cov_fb, s$mu_f, s$wgt_b, j,
+                         c(store$low_bound[i], store$up_bound[i]))
+        if (min(c(0, l$l_i), na.rm = TRUE) > min(c(0, l_in), na.rm = TRUE)) {
+          l_in <- l$l_i
+          i_in <- i
+          b_i_in <- l$b_i
+        }
       }
     }
-  }
-  # descide lambda
-  if (max(l_in, 0, na.rm) > l_out) {
+    # Case b)
+    l_out <- NA
+    if (length(store$i_free) < n_assets) {
+      b <- get_b(store$i_free, n_assets)
+      l_vec <- rep(0, length(b))
+      j <- 1
+      for (i in b) {
+        s <- sub_mat(mu_vec, cov_mat, store$wgt_vec, c(store$i_free, i))
+        l <- calc_lambda(s$cov_f_inv, s$cov_fb, s$mu_f, s$wgt_b, length(s$mu_f),
+                         store$wgt_vec[i])
+        j <- j + 1
+        if ((is.na(store$l) | l$l_i < store$l) & (l$l_i > 0 | l$l_i > l_out)) {
+          l_out <- l$l_i
+          i_out <- i
+        }
+      }
+    }
 
-  } else {
-    store$l <- c(store$l, l_out)
-    store$i_free <- c(store$i_free, i_out)
+    if ((is.na(l_out) | l_out == 0) & (is.na(l_in) | l_in == 0)) {
+      break
+    }
+
+    # decide lambda
+    if (max(c(l_in, 0), na.rm = TRUE) > l_out) {
+      store$l <- c(store$l, l_in)
+      store$i_free <- store$i_free[!i_in]
+      store$wgt_vec[i_in] <- b_i_in
+    } else {
+      store$l <- c(store$l, l_out)
+      store$i_free <- c(store$i_free, i_out)
+    }
+    s <- sub_mat(mu_vec, cov_mat, store$wgt_vec, store$i_free)
+    wgt_f <- calc_wgt_f(s$cov_f_inv, s$cov_fb, s$mu_f, s$wgt_b,
+                        store$l[length(store$l)])
+    store$wgt_vec[store$i_free] <- wgt_f
+    store$wgt_list[[length(store$wgt_list) + 1]] <- store$wgt_vec
   }
-  s <- sub_mat(mu_vec, cov_mat, wgt_vec, store$i_free)
-  wgt_f <- calc_wgt_f(s$cov_f_inv, s$cov_fb, s$mu_f, s$wgt_b,
-                      store$l[length(store$l)])
-  store$wgt_vec[store$i_free] <- wgt_f
-  store$wgt_list[[length(store$wgt_list) + 1]] <- store$wgt_vec
 }
 
