@@ -1,0 +1,42 @@
+---
+title: "Intro to CriticalLineAlgo"
+author: "Alejandro Sotolongo"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r}
+
+```
+
+```{r}
+mu_vec <- read.csv(sprintf('https://docs.google.com/uc?id=%s&export=download', 
+                           '1uC7uADMHxzqB9STQmOIoJ2Bh6O1wqh4O'), 
+                   row.names = NULL)
+cov_mat <- read.csv(sprintf('https://docs.google.com/uc?id=%s&export=download', 
+                           '1E0O583f7F7fX0kZFIgaOtIz8sDFmy3AZ'),
+                    row.names = NULL)
+asset_class <- mu_vec[, 2]
+mu_vec <- mu_vec[, 3]
+cov_mat <- as.matrix(cov_mat[, 2:ncol(cov_mat)])
+```
+
+```{r}
+store <- run_cla(mu_vec, cov_mat)
+corner_wgt <- do.call(cbind, store$wgt_list)
+exp_ret <- apply(corner_wgt, 2, function(m, w) {t(w) %*% m}, m = mu_vec)
+exp_vol <- apply(corner_wgt, 2, function(covar, w) {sqrt(t(w) %*% covar %*% w)},
+                 covar = cov_mat)
+plot(exp_vol, exp_ret, ylab = 'Expected Return', xlab = 'Expected Volatility')
+```
