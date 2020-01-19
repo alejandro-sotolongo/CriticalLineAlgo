@@ -53,10 +53,14 @@ run_cla <- function(mu_vec, cov_mat, low_bound = 0, up_bound = 1,
         }
       }
     }
+    # if lambda hits zero we are at the last corner portfolio and can exit
+    if (l_out <= 0 & l_in <= 0) {
+      break
+    }
     # choose lambda
-    if (max(c(l_in, 0), na.rm = TRUE) > l_out) {
+    if (max(c(l_in, -Inf), na.rm = TRUE) > l_out) {
       store$l <- c(store$l, l_in)
-      store$i_free <- store$i_free[!i_in]
+      store$i_free <- store$i_free[which(store$i_free != i_in)]
       store$wgt_vec[i_in] <- b_i_in
     } else {
       store$l <- c(store$l, l_out)
@@ -74,18 +78,7 @@ run_cla <- function(mu_vec, cov_mat, low_bound = 0, up_bound = 1,
                         store$l[length(store$l)])
     store$wgt_vec[store$i_free] <- wgt_f
     store$wgt_list[[length(store$wgt_list) + 1]] <- store$wgt_vec
-    # if lambda hits zero we are at the last corner portfolio and can exit
-    if (l_out <= 0 & l_in <= 0) {
-      break
-    }
   }
-  # calculate global min variance portfolio and add to store before returning
-  # stored values
-  s <- store$s
-  wgt_f <- calc_wgt_f(s$cov_f_inv, s$cov_fb, rep(0, length(s$mu_f)), s$wgt_b,
-                      store$l[length(store$l)])
-  store$wgt_vec[store$i_free] <- wgt_f
-  store$wgt_list[[length(store$wgt_list) + 1]] <- store$wgt_vec
   return(store)
 }
 
