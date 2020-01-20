@@ -4,15 +4,20 @@
 #' @param low_bound lower bound weights, see details
 #' @param up_bound upper bound weights, see details
 #' @param max_iter maximum number of iterations to run while searching for corner
+#' @param low_vol_break optional volatility level to exit the solver if reached
 #' portfolios
 #' @return a list containing the weights for each corner portfolio \code{wgt_list}
 #' @details The \code{low_bound} and \code{up_bound} weights are the corresponding 
 #' upper and lower bound weights for each asset in the \code{mu_vec}. They can
 #' be entered as a single numeric value if all assets have the same upper or lower
-#' bound weight or a vector of upper and lower bound weights can be entered.
+#' bound weight or a vector of upper and lower bound weights can be entered. 
+#' The \code{low_vol_break} is an option to truncate the frontier at a certain 
+#' volatility level. For example if for a given problem you don't care about
+#' portfolios with less than 2% volatility you can enter \code{0.02} to stop
+#' the solver once it finds a corner portfolio with 2% vol.
 #' @export
 run_cla <- function(mu_vec, cov_mat, low_bound = 0, up_bound = 1,
-                    max_iter = 1000) {
+                    max_iter = 1000, low_vol_break = 0) {
   
   mu_vec <- matrix(mu_vec, ncol = 1)
   store <- init_cla(mu_vec, low_bound, up_bound)
@@ -78,6 +83,10 @@ run_cla <- function(mu_vec, cov_mat, low_bound = 0, up_bound = 1,
                         store$l[length(store$l)])
     store$wgt_vec[store$i_free] <- wgt_f
     store$wgt_list[[length(store$wgt_list) + 1]] <- store$wgt_vec
+    port_vol <- sqrt(t(store$wgt_vec) %*% cov_mat %*% store$wgt_vec)
+    if (port_vol <= low_vol_break) {
+      break
+    }
   }
   return(store)
 }
@@ -150,7 +159,7 @@ sub_mat <- function(mu_vec, cov_mat, wgt_vec, f) {
   return(res)
 }
 
-
+#' @importFrom MASS ginv
 calc_lambda <- function(cov_f_inv, cov_fb, mu_f, wgt_b, i, b_i) {
 
   # calculate lambdas
@@ -206,5 +215,3 @@ port_vol <- function(cov_mat, w) {
   # portfolio standard deviation
   sqrt(t(w) %*% cov_mat %*% w)
 }
-
-

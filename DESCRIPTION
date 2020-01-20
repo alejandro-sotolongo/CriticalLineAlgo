@@ -3,7 +3,7 @@ Type: Package
 Title: Portfolio Optimization using the Critical Line Algorithm
 Version: 0.1.0
 Author: Alejandro Sotolongo
-Maintainer: alejandro.l.sotolongo@gmail.com
+Maintainer: Alejandro Sotolongo <alejandro.l.sotolongo@gmail.com>
 Description: A lightweight implementation of the Critical Line Algorithm
     to solve for corner portfolios along the efficiency frontier.
 License: GPLv3

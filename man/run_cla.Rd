@@ -4,7 +4,8 @@
 \alias{run_cla}
 \title{Run the critical line algo}
 \usage{
-run_cla(mu_vec, cov_mat, low_bound = 0, up_bound = 1)
+run_cla(mu_vec, cov_mat, low_bound = 0, up_bound = 1,
+  max_iter = 1000, low_vol_break = 0)
 }
 \arguments{
 \item{mu_vec}{vector or column matrix of expected returns}
@@ -14,6 +15,11 @@ run_cla(mu_vec, cov_mat, low_bound = 0, up_bound = 1)
 \item{low_bound}{lower bound weights, see details}
 
 \item{up_bound}{upper bound weights, see details}
+
+\item{max_iter}{maximum number of iterations to run while searching for corner}
+
+\item{low_vol_break}{optional volatility level to exit the solver if reached
+portfolios}
 }
 \value{
 a list containing the weights for each corner portfolio \code{wgt_list}
@@ -25,5 +31,9 @@ Run the critical line algo
 The \code{low_bound} and \code{up_bound} weights are the corresponding 
 upper and lower bound weights for each asset in the \code{mu_vec}. They can
 be entered as a single numeric value if all assets have the same upper or lower
-bound weight or a vector of upper and lower bound weights can be entered.
+bound weight or a vector of upper and lower bound weights can be entered. 
+The \code{low_vol_break} is an option to truncate the frontier at a certain 
+volatility level. For example if for a given problem you don't care about
+portfolios with less than 2% volatility you can enter \code{0.02} to stop
+the solver once it finds a corner portfolio with 2% vol.
 }
