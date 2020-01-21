@@ -27,21 +27,24 @@ The critical line algorithm (CLA) was developed by Harry Markowitz to solve the 
 
 This package mostly follows the notation of [Bailey and Lopez de Prado 2013](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2197616) and [Niedermayer and Niedermayer 2006](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=894842).
 
-In this example we'll use expected returns and covariance from [Research Affiliates' Asset Allocation Tool](https://interactive.researchaffiliates.com). I downloaded their valuation-dependent nominal expectations and saved the results in csv files that can be read from Google Drive in the code cell below. The expected returns and covariance matrix were downloaded in November 2019. 
+There are two main functions to interface with: `run_cla` and `calc_target_vol`. `run_cla` will solve for the corner portfolios and output a list with the stored output. `calc_target_vol` takes the list output from `run_cla` and finds the weights of an efficient portfolio for a specific level of volatility. 
+
+In order to run the CLA a `mu_vec` of estimated returns and `cov_mat` of estimated covariance are needed. This introduction reads the `mu_vec` and `cov_mat` from csv files stored in Google Drive. The estimates are historical `mean` and `cov` estimates from 16 ETF time-series to represent different asset classes. The `mu_vec` and `cov_mat` are not predictions of the future. Instead they are used here to demonstrate how this package works.
 
 ```{r}
-mu_vec <- read.csv(sprintf('https://docs.google.com/uc?id=%s&export=download', 
-                           '1uC7uADMHxzqB9STQmOIoJ2Bh6O1wqh4O'), 
+mu_data <- read.csv(sprintf('https://docs.google.com/uc?id=%s&export=download', 
+                           '1vUPvKqJSR-3ZlWTWwf1r2kjguEDqmDM6'), 
                    row.names = NULL)
-cov_mat <- read.csv(sprintf('https://docs.google.com/uc?id=%s&export=download', 
-                           '1E0O583f7F7fX0kZFIgaOtIz8sDFmy3AZ'),
+cov_data <- read.csv(sprintf('https://docs.google.com/uc?id=%s&export=download', 
+                           '1g53v1D9mXvfcYKMsquHIj2CF7Lrn6-GX'),
                     row.names = NULL)
-asset_class <- mu_vec[, 2]
-mu_vec <- mu_vec[, 3]
-cov_mat <- as.matrix(cov_mat[, 2:ncol(cov_mat)])
+asset_class <- mu_data$ETF
+mu_vec <- mu_data$mu
+cov_mat <- as.matrix(cov_data[, 2:ncol(cov_data)])
+mu_data
 ```
 
-`cla_run` is the interface that runs the algorithm and returns the results. The `mu_vec` and `cov_mat` are passed in as the first two arguments.
+`run_cla` is the interface that runs the algorithm and returns the results. The `mu_vec` and `cov_mat` are passed in as the first two arguments.
 
 ```{r}
 store <- run_cla(mu_vec, cov_mat)
@@ -56,25 +59,40 @@ exp_vol <- apply(corner_wgt, 2, function(covar, w) {sqrt(t(w) %*% covar %*% w)},
                  covar = cov_mat)
 plot(sqrt(diag(cov_mat)), mu_vec, col = 'grey', 
      ylab = 'Expected Return', xlab = 'Expected Volatility')
-points(exp_vol, exp_ret, col = 'darkgreen')
+points(exp_vol, exp_ret, col = 'darkgreen', lwd = 2, type = 'b')
 title('Efficiency Frontier Example')
 mtext('Corner Portfolios in Green, Individual Assets in Grey')
 rownames(corner_wgt) <- asset_class
-round(corner_wgt * 100, 2)[, 1:7]
+colnames(corner_wgt) <- paste('Vol ', round(exp_vol * 100, 1))
+round(corner_wgt * 100, 1)
 ```
 
-Lower and upperbound weights can be entered to constrain the solution. This implementation of the CLA is already constrained to be long-only and limits the sum of the weights to one. The default for the upperbound weight of each asset is 1. In the previous optimization EM Cash went to high levels fairly quickly. The code below caps EM Cash to 5%.
+`run_cla` supports adding lower and upperbound weight limits. This version of the CLA has a long-only constraint (i.e., the sum of the portfolio weights = 1). There are two ways of entering asset constraints. A single numeric value will be applied to each asset, e.g., entering `0.5` as the upper bound constraint will limit every asset to a maxium weight of 50%. A vector of weights that correspond to each asset in the `mu_vec` and `cov_mat` can be entered as input to allow for different constraints for each asset. The code below is an example of the latter: a constraint of 50% will be applied to all assets except HYG, AMJ, and GLD will be constrained at 10%.
 
 ```{r}
-ub <- rep(1, length(mu_vec))
-ub[which(asset_class == 'EM Cash')] <- 0.05
-store_bound <- run_cla(mu_vec, cov_mat, 0, ub)
-corner_wgt <- do.call(cbind, store_bound$wgt_list)
+up_bound <- rep(0.5, length(mu_vec))
+up_bound[asset_class %in% c('HYG', 'AMJ', 'GLD')] <- 0.1
+store_constr <- run_cla(mu_vec, cov_mat, up_bound = up_bound)
+corner_wgt <- do.call(cbind, store_constr$wgt_list)
+exp_ret <- apply(corner_wgt, 2, function(m, w) {t(w) %*% m}, m = mu_vec)
+exp_vol <- apply(corner_wgt, 2, function(covar, w) {sqrt(t(w) %*% covar %*% w)},
+                 covar = cov_mat)
 plot(sqrt(diag(cov_mat)), mu_vec, col = 'grey', 
      ylab = 'Expected Return', xlab = 'Expected Volatility')
-points(exp_vol, exp_ret, col = 'darkgreen')
+points(exp_vol, exp_ret, col = 'darkgreen', lwd = 2, type = 'b')
 title('Efficiency Frontier Example with Constraints')
 mtext('Corner Portfolios in Green, Individual Assets in Grey')
 rownames(corner_wgt) <- asset_class
-round(corner_wgt * 100, 2)[, 1:7]
+colnames(corner_wgt) <- paste('Vol ', round(exp_vol * 100, 1))
+round(corner_wgt * 100, 1)
 ```
+
+`calc_target_vol` solves for the weights for an efficient portfolio with a specific volatility target. If the volatility target is not on the frontier a warning message will print and a value of `NA` will be returned.
+
+```{r}
+vol_10_wgt <- calc_target_vol(store_constr, cov_mat, 0.1)
+rownames(vol_10_wgt) <- asset_class
+round(vol_10_wgt * 100, 1)
+sqrt(t(vol_10_wgt) %*% cov_mat %*% vol_10_wgt)
+```
+
