@@ -7,24 +7,26 @@
 #' @param low_vol_break optional volatility level to exit the solver if reached
 #' portfolios
 #' @return a list containing the weights for each corner portfolio \code{wgt_list}
-#' @details The \code{low_bound} and \code{up_bound} weights are the corresponding 
+#' @details The \code{low_bound} and \code{up_bound} weights are the corresponding
 #' upper and lower bound weights for each asset in the \code{mu_vec}. They can
 #' be entered as a single numeric value if all assets have the same upper or lower
-#' bound weight or a vector of upper and lower bound weights can be entered. 
-#' The \code{low_vol_break} is an option to truncate the frontier at a certain 
+#' bound weight or a vector of upper and lower bound weights can be entered.
+#' The \code{low_vol_break} is an option to truncate the frontier at a certain
 #' volatility level. For example if for a given problem you don't care about
 #' portfolios with less than 2% volatility you can enter \code{0.02} to stop
 #' the solver once it finds a corner portfolio with 2% vol.
 #' @export
 run_cla <- function(mu_vec, cov_mat, low_bound = 0, up_bound = 1,
-                    max_iter = 1000, low_vol_break = 0) {
-  
+                    max_iter = 1000, low_vol_break = 0, clean = TRUE) {
+
   mu_vec <- matrix(mu_vec, ncol = 1)
   store <- init_cla(mu_vec, low_bound, up_bound)
   n_assets <- nrow(mu_vec)
   store$l <- NA
+  store$l_in <- NA
+  store$l_out <- NA
   store$wgt_list <- list(store$wgt_vec)
-  
+  store$s <- list(NA)
   for (iter in 1:max_iter) {
     # Case a) bound a free weight
     l_in <- -100
@@ -71,6 +73,8 @@ run_cla <- function(mu_vec, cov_mat, low_bound = 0, up_bound = 1,
       store$l <- c(store$l, l_out)
       store$i_free <- c(store$i_free, i_out)
     }
+    store$l_in <- c(store$l_in, l_in)
+    store$l_out <- c(store$l_out, l_out)
     # if all weights are bound we have hit the lowest corner portfolio and can
     # exit
     if (length(store$i_free) == 0) {
@@ -78,29 +82,80 @@ run_cla <- function(mu_vec, cov_mat, low_bound = 0, up_bound = 1,
     }
     # solve free weights and place into the stored weight list
     s <- sub_mat(mu_vec, cov_mat, store$wgt_vec, store$i_free)
-    store$s <- s
+    store$s[[iter + 1]] <- s
     wgt_f <- calc_wgt_f(s$cov_f_inv, s$cov_fb, s$mu_f, s$wgt_b,
                         store$l[length(store$l)])
     store$wgt_vec[store$i_free] <- wgt_f
     store$wgt_list[[length(store$wgt_list) + 1]] <- store$wgt_vec
     port_vol <- sqrt(t(store$wgt_vec) %*% cov_mat %*% store$wgt_vec)
+    if (is.na(port_vol)) {
+      port_vol <- Inf
+    }
     if (port_vol <= low_vol_break) {
       break
     }
   }
-  return(store)
+  if (clean) {
+    return(clean_store(store))
+  } else {
+    return(store)
+  }
 }
 
 
+#' @title Solve weights for a target volatility
+#' @param store output of \code{run_cla}
+#' @param cov_mat covariance matrix
+#' @param target_vol volatiltiy level to solve for
+#' @param tol tolerance for volatility solution difference from \code{target_vol}
+#' @param max_iter maximum iterations for attempted solution
+calc_target_vol <- function(store, cov_mat, target_vol, tol = 0.0001,
+                            max_iter = 10000) {
+
+  port_vol <- sapply(store$wgt_list, calc_port_vol, cov_mat = cov_mat)
+  vol_idx <- min(which(port_vol <= target_vol))
+  if (vol_idx == Inf) {
+    stop('target_vol is below possible vol range')
+  }
+  if (target_vol > port_vol[1]) {
+    stop('target_vol is above possible vol range')
+  }
+  lambda <- store$l[c(vol_idx - 1, vol_idx)]
+  wgt <- store$wgt_list[[vol_idx - 1]]
+  for (i in 1:max_iter) {
+    mean_lambda <- mean(lambda)
+    s <- store$s[[vol_idx - 1]]
+    wgt_f <- calc_wgt_f(s$cov_f_inv, s$cov_fb, s$mu_f, s$wgt_b, mean_lambda)
+    wgt[s$f] <- wgt_f
+    vol_i <- calc_port_vol(cov_mat, wgt)
+    if (abs(lambda[1] - lambda[2]) <= tol) {
+      break
+    }
+    if (vol_i < target_vol) {
+      lambda[2] <- mean_lambda
+    } else {
+      lambda[1] <- mean_lambda
+    }
+  }
+  return(wgt)
+}
+
+
+#' @title Initialize Critical Line Algo
+#' @param mu_vec vector or column matrix of expected returns
+#' @param low_bound lower bound weights
+#' @param up_bound upper bound weights
+#' @return list containing initial weight vector and free weight position
+#' @export
 init_cla <- function(mu_vec, low_bound, up_bound) {
-  
+
   # param ----
   # mu_vec = vector of expected returns
   # low_bound = lower bound weights
   # up_bound = upper bound weights
   # ----
   # To initialize the algo, we first find the portfolio highest return given the
-  # mu_vec and lower and upper bound constraints. The mu_vec and bounds are 
+  # mu_vec and lower and upper bound constraints. The mu_vec and bounds are
   # structured as column matrixes and returned in the res list. The first free
   # weight index is returned in the res list as i_free.
   n_assets <- nrow(mu_vec)
@@ -137,18 +192,39 @@ init_cla <- function(mu_vec, low_bound, up_bound) {
 }
 
 
+#' @title Remove weight solutions that violate the lowerbound constraint
+#' @param store storage list from \code{run_cla}
+#' @note Poorly conditioned covariance matrices can lead to solutions with negative
+#' weights.
+#' @export
+clean_store <- function(store) {
+  wgt_err <- sapply(store$wgt_list, function(x) {sum(abs(x))}) > 1.01
+  store$wgt_list <- store$wgt_list[!wgt_err]
+  store$l <- store$l[!wgt_err]
+  return(store)
+}
+
+
+#' @title Get bound weights from free weights
+#' @param f free weight positions
+#' @param n_assets total number of assets
+#' @export
 get_b <- function(f, n_assets) {
-  
-  # utility function to return bound weights given the free weight index and
-  # number of assets
+
   b <- 1:n_assets
   b[!b %in% f]
 }
 
 
+#' @title Subset matrices into free and bound sections
+#' @param mu_vec expected returns
+#' @param cov_mat expected covariance matrix
+#' @param wgt_vec asset weights
+#' @param f free weight positions
+#' @export
+#' @importFrom MASS ginv
 sub_mat <- function(mu_vec, cov_mat, wgt_vec, f) {
-  
-  # subset matrixes based on the free weight index f
+
   res <- list()
   b <- get_b(f, nrow(mu_vec))
   res$cov_f <- cov_mat[f, f]
@@ -156,13 +232,21 @@ sub_mat <- function(mu_vec, cov_mat, wgt_vec, f) {
   res$cov_fb <- cov_mat[f, b]
   res$mu_f <- mu_vec[f, 1]
   res$wgt_b <- wgt_vec[b, 1]
+  res$f <- f
   return(res)
 }
 
-#' @importFrom MASS ginv
+
+#' @title Calculate lambda
+#' @param cov_f_inv inverse of covaraince of free weights
+#' @param cov_fb covariance subset of free weight row and bound weight column
+#' @param mu_f expected returns of free weights
+#' @param wgt_b weights of bound assets
+#' @param i position in lambda_i
+#' @param b_i upper or lowerbound weight depending on intermediate calc
+#' @export
 calc_lambda <- function(cov_f_inv, cov_fb, mu_f, wgt_b, i, b_i) {
 
-  # calculate lambdas
   one_f <- matrix(1, nrow = length(mu_f), ncol = 1)
   one_b <- matrix(1, nrow = length(wgt_b), ncol = 1)
   c1 <- t(one_f) %*% cov_f_inv %*% one_f
@@ -187,9 +271,15 @@ calc_lambda <- function(cov_f_inv, cov_fb, mu_f, wgt_b, i, b_i) {
 }
 
 
+#' @title Calculate free weights
+#' @param cov_f_inv inverse of covaraince of free weights
+#' @param cov_fb covariance subset of free weight row and bound weight column
+#' @param mu_f expected returns of free weights
+#' @param wgt_b weights of bound assets
+#' @param l lambda
+#' @export
 calc_wgt_f <- function(cov_f_inv, cov_fb, mu_f, wgt_b, l) {
 
-  # calculate the free weight values
   one_f <- matrix(1, nrow = length(mu_f), ncol = 1)
   one_b <- matrix(1, nrow = length(wgt_b), ncol = 1)
   g1 <- t(one_f) %*% cov_f_inv %*% mu_f
@@ -205,13 +295,19 @@ calc_wgt_f <- function(cov_f_inv, cov_fb, mu_f, wgt_b, l) {
 }
 
 
-port_mu <- function(mu, w) {
-  # portfolio return
+#' @title Portfolio return
+#' @param mu expected return column matrix
+#' @param w portfolio weight column
+#' @export
+calc_port_mu <- function(mu, w) {
   t(w) %*% mu
 }
 
 
-port_vol <- function(cov_mat, w) {
-  # portfolio standard deviation
-  sqrt(t(w) %*% cov_mat %*% w)
+#' @title Portfolio volatility
+#' @param cov_mat expected covariance matrix
+#' @param w portfolio weight column
+#' @export
+calc_port_vol <- function(cov_mat, w) {
+  sqrt(t(w) %*% cov_mat %*% w)[1]
 }
