@@ -3,6 +3,7 @@
 export(calc_lambda)
 export(calc_port_mu)
 export(calc_port_vol)
+export(calc_target_vol)
 export(calc_wgt_f)
 export(clean_store)
 export(get_b)

@@ -17,6 +17,10 @@ calc_target_vol(store, cov_mat, target_vol, tol = 1e-04, max_iter = 10000)
 
 \item{max_iter}{maximum iterations for attempted solution}
 }
+\value{
+weights of target vol portfolio or NA if target vol weights cannot be
+solved (plus a warning)
+}
 \description{
 Solve weights for a target volatility
 }

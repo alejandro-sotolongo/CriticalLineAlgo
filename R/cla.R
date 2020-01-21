@@ -109,16 +109,21 @@ run_cla <- function(mu_vec, cov_mat, low_bound = 0, up_bound = 1,
 #' @param target_vol volatiltiy level to solve for
 #' @param tol tolerance for volatility solution difference from \code{target_vol}
 #' @param max_iter maximum iterations for attempted solution
+#' @return weights of target vol portfolio or NA if target vol weights cannot be
+#' solved (plus a warning)
+#' @export
 calc_target_vol <- function(store, cov_mat, target_vol, tol = 0.0001,
                             max_iter = 10000) {
 
   port_vol <- sapply(store$wgt_list, calc_port_vol, cov_mat = cov_mat)
   vol_idx <- min(which(port_vol <= target_vol))
   if (vol_idx == Inf) {
-    stop('target_vol is below possible vol range')
+    warning('target_vol is below possible vol range')
+    return(NA)
   }
   if (target_vol > port_vol[1]) {
-    stop('target_vol is above possible vol range')
+    warning('target_vol is above possible vol range')
+    return(NA)
   }
   lambda <- store$l[c(vol_idx - 1, vol_idx)]
   wgt <- store$wgt_list[[vol_idx - 1]]
@@ -135,6 +140,10 @@ calc_target_vol <- function(store, cov_mat, target_vol, tol = 0.0001,
       lambda[2] <- mean_lambda
     } else {
       lambda[1] <- mean_lambda
+    }
+    if (i == max_iter) {
+      warning('could not find solution')
+      return(NA)
     }
   }
   return(wgt)
