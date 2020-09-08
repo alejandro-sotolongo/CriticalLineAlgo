@@ -25,8 +25,9 @@ run_cla(
 
 \item{max_iter}{maximum number of iterations to run while searching for corner}
 
-\item{low_vol_break}{optional volatility level to exit the solver if reached
-portfolios}
+\item{low_vol_break}{optional volatility level to exit the solver if reached}
+
+\item{clean}{boolean to remove solutions that violate the constraints}
 }
 \value{
 a list containing the weights for each corner portfolio \code{wgt_list}
@@ -41,6 +42,6 @@ be entered as a single numeric value if all assets have the same upper or lower
 bound weight or a vector of upper and lower bound weights can be entered.
 The \code{low_vol_break} is an option to truncate the frontier at a certain
 volatility level. For example if for a given problem you don't care about
-portfolios with less than 2% volatility you can enter \code{0.02} to stop
-the solver once it finds a corner portfolio with 2% vol.
+portfolios with less than 2\% volatility you can enter \code{0.02} to stop
+the solver once it finds a corner portfolio with 2\% vol.
 }

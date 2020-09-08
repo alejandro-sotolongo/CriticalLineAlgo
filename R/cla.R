@@ -5,7 +5,7 @@
 #' @param up_bound upper bound weights, see details
 #' @param max_iter maximum number of iterations to run while searching for corner
 #' @param low_vol_break optional volatility level to exit the solver if reached
-#' portfolios
+#' @param clean boolean to remove solutions that violate the constraints
 #' @return a list containing the weights for each corner portfolio \code{wgt_list}
 #' @details The \code{low_bound} and \code{up_bound} weights are the corresponding
 #' upper and lower bound weights for each asset in the \code{mu_vec}. They can
